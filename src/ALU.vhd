@@ -44,35 +44,49 @@ architecture Behavioral of ALU is
 begin
     process (i_A, i_B, i_op)
     variable temp_value: unsigned (8 downto 0);
+    variable result : std_logic_vector (7 downto 0);
+    
     begin 
+        result := (others => '0');
+        o_flags <= (others => '0');
+        
         if i_op = "000" then -- add
             temp_value := ('0' & unsigned(i_A)) + ('0' & unsigned(i_B));
-            o_flags(2) <= temp_value(8); -- carry
-            o_result <= std_logic_vector(temp_value(7 downto 0));
+            o_flags(1) <= temp_value(8); -- carry
+            result := std_logic_vector(temp_value(7 downto 0));
             
-            o_flags(1) <= (i_A(7) and i_B(7) and not temp_value(7)) or 
+            o_flags(0) <= (i_A(7) and i_B(7) and not temp_value(7)) or 
                           (not i_A(7) and not i_B(7) and temp_value(7));
-            
+                          
         elsif i_op = "001" then -- subtract
             temp_value := ('0' & unsigned(i_A)) - ('0' & unsigned(i_B));
-            o_flags(2) <= temp_value(8); -- carry
-            o_result <= std_logic_vector(temp_value(7 downto 0));
+            if unsigned(i_A) >= unsigned(i_B) then
+                o_flags(1) <= '1';
+            else 
+                o_flags(1) <= '0'; -- carry
+            end if;
+            result := std_logic_vector(temp_value(7 downto 0));
             
-            o_flags(1) <= (i_A(7) and not i_B(7) and not temp_value(7)) or 
+            o_flags(0) <= (i_A(7) and not i_B(7) and not temp_value(7)) or 
                           (not i_A(7) and i_B(7) and temp_value(7));
-            
+                                    
             
         elsif i_op = "010" then -- and
-            o_result <= i_A and i_B;
+            result := i_A and i_B;
         elsif i_op = "011" then -- or
-            o_result <= i_A or i_B;
+            result := i_A or i_B;
         end if;
-            
-        o_flags(3) <= temp_value(7); -- negative
-               
-        if temp_value = "000000000" then
-            o_flags(0) <= '1';
-        end if;
+        
+        o_result <= result; 
+        
+        o_flags(3) <= result(7); -- negative
+                  
+        if result = "00000000" then
+            o_flags(2) <= '1';
+        else 
+            o_flags(2) <= '0';
+        end if; 
+       
     end process;
 
 
