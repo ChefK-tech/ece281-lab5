@@ -46,7 +46,8 @@ architecture top_basys3_arch of top_basys3 is
   
 	-- declare components and signals
 	component controller_fsm is
-    Port ( i_reset : in STD_LOGIC;
+    Port ( clk : in STD_LOGIC;
+           i_reset : in STD_LOGIC;
            i_adv : in STD_LOGIC;
            o_cycle : out STD_LOGIC_VECTOR (3 downto 0));
     end component controller_fsm;
@@ -107,7 +108,7 @@ architecture top_basys3_arch of top_basys3 is
         );
     end component TDM4;
     
-    signal btn_debounce : std_logic;
+    signal btn_debounce : std_logic := '0';
     signal alu_result : std_logic_vector (7 downto 0); -- In between vector
     signal w_clk : std_logic; 
     signal w_sign: std_logic;
@@ -116,8 +117,17 @@ architecture top_basys3_arch of top_basys3 is
     signal w_tens: std_logic_vector(3 downto 0);
     signal w_ones: std_logic_vector(3 downto 0);
     signal w_tdm_data  : std_logic_vector(3 downto 0);
-    signal w_tdm_sel   : std_logic_vector(3 downto 0);
-    signal w_seg_int  : STD_LOGIC_VECTOR(6 downto 0);  -- internal signal
+    signal w_tdm_sel   : std_logic_vector(3 downto 0) := "0000";
+    signal w_seg_int  : std_logic_vector(6 downto 0);  -- internal signal
+    signal w_seg_check : std_logic_vector(6 downto 0);
+    signal w_cycle : std_logic_vector (3 downto 0) := "0001";
+    signal w_A : std_logic_vector(7 downto 0);
+    signal w_B : std_logic_vector(7 downto 0);
+    signal w_op : std_logic_vector (2 downto 0);
+    signal w_number : std_logic_vector (7 downto 0) := "00000000";
+    signal w_tdm_clk : std_logic;
+    signal w_flags: std_logic_vector (3 downto 0);
+    
   
 begin
 	-- PORT MAPS ----------------------------------------
@@ -131,42 +141,66 @@ begin
 	
 	controller_inst : controller_fsm
         port map(
+            clk => clk,
             i_reset => btnU,
             i_adv  => btn_debounce,
-            o_cycle(3) => led(3),
-            o_cycle(2) => led(2),
-            o_cycle(1) => led(1),
-            o_cycle(0) => led(0)
+            o_cycle => w_cycle
         );
-        
+            
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if btnU = '1' then
+                w_A <= "00000000";
+                w_B <= "00000000";
+                w_op <= "000";
+            elsif btn_debounce = '1' then
+                if w_cycle = "0001" then
+                    w_A <= sw(7 downto 0);
+                elsif w_cycle = "0010" then
+                    w_B <= sw(7 downto 0);
+                elsif w_cycle = "0100" then
+                    w_op <= sw(2 downto 0);
+                end if;
+            end if;
+        end if;
+    end process;
+
     alu_inst : ALU 
         port map(
-            i_A => sw(7 downto 0),
-            i_B => sw(7 downto 0),
-            i_op => sw(2 downto 0),
+            i_A => w_A,
+            i_B => w_B,
+            i_op => w_op,
             o_result => alu_result,
-            o_flags => led(15 downto 12)
+            o_flags => w_flags 
         );
         
-    clock_inst : clock_divider
-        port map(
-            i_clk => clk,
+    clock_inst : clock_divider 		--instantiation of clock_divider to take 
+        generic map ( k_DIV => 25000 ) -- 1 Hz clock to 4Hz clock
+        port map (						  
+            i_clk   => clk,
             i_reset => btnU,
-            o_clk => w_clk
-        );
+            o_clk   => w_tdm_clk
+        );  
+        
+    -- Replace your w_number process with this simple combinational logic:
+    w_number <= w_A         when w_cycle = "0010" else
+                w_B         when w_cycle = "0100" else
+                alu_result  when w_cycle = "1000" else
+                (others => '0');
         
     twoscomp_inst : twos_comp 
         port map(
-           i_bin => alu_result,
+           i_bin => w_number,
            o_sign => w_sign,
            o_hund => w_hund,
            o_tens => w_tens,
            o_ones => w_ones
       );
-        
+
     tdm4_inst : TDM4 
         port map(
-           i_clk => w_clk,
+           i_clk => w_tdm_clk,
            i_reset => btnU,
            i_D3 => w_tdm_sign,
            i_D2 => w_hund,
@@ -180,18 +214,23 @@ begin
         i_Hex   => w_tdm_data,
         o_seg_n => w_seg_int
        );
+     
+    
        
-    w_seg_int <= "0000001" when w_sign = '1' else "0000000";
-	
 	-- CONCURRENT STATEMENTS ----------------------------
 	led(11 downto 4) <= (others => '0');  -- LEDs 4-11 off
+	led(3 downto 0) <= w_cycle;  
+	led(15 downto 12) <= w_flags when w_cycle = "1000" else
+	   "0000"; 
 	
 	-- leave unused switches UNCONNECTED. Ignore any warnings this causes.
-	an <= "0000" when w_tdm_sel = "1110"
+	an <= "1111" when btnU = '1' or w_cycle = "0001"
           else w_tdm_sel;
-     -- Inverts each bit
-    seg <= w_seg_int;
-	
+          
+    -- Final output logic to override the decoder for the sign digit
+    seg <= "0111111" when (w_tdm_sel = "0111" and w_sign = '1') else -- Dash
+           "1111111" when (w_tdm_sel = "0111" and w_sign = '0') else -- Blank
+           w_seg_int;
 	
 	
 end top_basys3_arch;

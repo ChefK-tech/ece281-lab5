@@ -32,7 +32,8 @@ use IEEE.STD_LOGIC_1164.ALL;
 --use UNISIM.VComponents.all;
 
 entity controller_fsm is
-    Port ( i_reset : in STD_LOGIC;
+    Port ( clk : in STD_LOGIC;
+           i_reset : in STD_LOGIC;
            i_adv : in STD_LOGIC;
            o_cycle : out STD_LOGIC_VECTOR (3 downto 0));
 end controller_fsm;
@@ -43,16 +44,24 @@ architecture FSM of controller_fsm is
     signal f_Q_next: std_logic_vector(3 downto 0) := "0001";
 
 begin
-    -- Concurrent Statements --------------
-    -- Next State Logic
-    f_Q_next(3) <= (f_Q(2) and i_adv) or (f_Q(3) and not i_adv);
-    f_Q_next(2) <= (f_Q(1) and i_adv) or (f_Q(2) and not i_adv);
-    f_Q_next(1) <= (f_Q(0) and i_adv) or (f_Q(1) and not i_adv);
-    f_Q_next(0) <= (f_Q(3) and i_adv) or (f_Q(0) and not i_adv);
-    
-    -- Output Logic
+    process(clk)
+        begin
+            if rising_edge(clk) then
+                if (i_reset = '1') then
+                    f_Q <= "0001"; -- Proper hardware reset
+                elsif (i_adv = '1') then
+                    -- This implements your shift logic synchronously
+                    -- Next State Logic
+                    f_Q(3) <= (f_Q(2) and i_adv) or (f_Q(3) and not i_adv);
+                    f_Q(2) <= (f_Q(1) and i_adv) or (f_Q(2) and not i_adv);
+                    f_Q(1) <= (f_Q(0) and i_adv) or (f_Q(1) and not i_adv);
+                    f_Q(0) <= (f_Q(3) and i_adv) or (f_Q(0) and not i_adv);
+                end if;
+            end if;
+        end process;
+        
+    -- Output Logic 
     o_cycle <= f_Q;
-    
     -- PROCESSES --------------------------------------------------------------------
     
     
